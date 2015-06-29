@@ -174,11 +174,10 @@ class RequestHandlerFactory:
             **self._kwargs)
 
 
-class Application(dict):
+class SubApplication(dict):
 
     def __init__(self, *, logger=web_logger, loop=None,
-                 router=None, handler_factory=RequestHandlerFactory,
-                 middlewares=()):
+                 router=None, middlewares=()):
         if loop is None:
             loop = asyncio.get_event_loop()
         if router is None:
@@ -186,7 +185,6 @@ class Application(dict):
         assert isinstance(router, AbstractRouter), router
 
         self._router = router
-        self._handler_factory = handler_factory
         self._finish_callbacks = []
         self._loop = loop
         self.logger = logger
@@ -194,6 +192,7 @@ class Application(dict):
         for factory in middlewares:
             assert asyncio.iscoroutinefunction(factory), factory
         self._middlewares = list(middlewares)
+        self._subapps = []
 
     @property
     def router(self):
@@ -207,12 +206,12 @@ class Application(dict):
     def middlewares(self):
         return self._middlewares
 
-    def make_handler(self, **kwargs):
-        return self._handler_factory(
-            self, self.router, loop=self.loop, **kwargs)
-
     @asyncio.coroutine
     def finish(self):
+        subapps, self._subapps = self._subapps, []
+        for subapp in subapps:
+            yield from subapp.finish()
+
         callbacks = self._finish_callbacks
         self._finish_callbacks = []
 
@@ -231,6 +230,24 @@ class Application(dict):
 
     def register_on_finish(self, func, *args, **kwargs):
         self._finish_callbacks.insert(0, (func, args, kwargs))
+
+    def __repr__(self):
+        return "<SubApplication>"
+
+
+class Application(SubApplication):
+
+    def __init__(self, *, logger=web_logger, loop=None,
+                 router=None, handler_factory=RequestHandlerFactory,
+                 middlewares=()):
+        super().__init__(logger=logger, loop=loop, router=router,
+                         middlewares=middlewares)
+
+        self._handler_factory = handler_factory
+
+    def make_handler(self, **kwargs):
+        return self._handler_factory(
+            self, self.router, loop=self.loop, **kwargs)
 
     def __call__(self):
         """gunicorn compatibility"""
