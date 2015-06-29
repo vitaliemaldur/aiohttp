@@ -80,7 +80,10 @@ class TestWeb(unittest.TestCase):
         self.loop.run_until_complete(app.finish())
         exc_info = {'exception': err,
                     'application': app,
-                    'message': 'Error in finish callback'}
+                    'message': 'Error in finish callback',
+                    'callback': mock.ANY,
+                    'args': (),
+                    'kwargs': {}}
         handler.assert_called_once_with(self.loop, exc_info)
 
     def test_non_default_router(self):
