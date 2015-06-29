@@ -285,6 +285,49 @@ class _MethodNotAllowedMatchInfo(UrlMappingMatchInfo):
                         ', '.join(sorted(self._allowed_methods))))
 
 
+class SubAppRoute(Route):
+
+    def __init__(self, subapp, prefix, name, *, expect_handler=None):
+        super().__init__('*', self._handle, name,
+                         expect_handler=expect_handler)
+        assert prefix.startswith('/'), prefix
+        assert prefix.endswith('/'), prefix
+        self._subapp = subapp
+        self._prefix = prefix
+
+    @asyncio.coroutine
+    def _handle(self):
+        pass
+
+    def match(self, path):
+        if path.startswith(self._prefix):
+            tail = path[len(self._prefix):]
+            for route in self._subapp.router:
+                match_dict = route.match(tail)
+                if match_dict is not None:
+                    return match_dict
+            else:
+                return None
+        else:
+            return None
+
+    def url(self, **kwargs):
+        raise RuntimeError(".url() is not allowed for SubAppRoute")
+
+    @property
+    def subapp(self):
+        return self._subapp
+
+    @property
+    def prefix(self):
+        return self._prefix
+
+    def __repr__(self):
+        name = "'" + self.name + "' " if self.name is not None else ""
+        return "<SubAppRoute {name} {prefix} -> {subapp!r}".format(
+            name=name, prefix=self._prefix, subapp=self._subapp)
+
+
 class UrlDispatcher(AbstractRouter, collections.abc.Mapping):
 
     DYN = re.compile(r'^\{(?P<var>[a-zA-Z][_a-zA-Z0-9]*)\}$')
@@ -301,6 +344,7 @@ class UrlDispatcher(AbstractRouter, collections.abc.Mapping):
         super().__init__()
         self._urls = []
         self._routes = {}
+        self._subapps = []
 
     @asyncio.coroutine
     def resolve(self, request):
@@ -416,3 +460,19 @@ class UrlDispatcher(AbstractRouter, collections.abc.Mapping):
                             chunk_size=chunk_size)
         self.register_route(route)
         return route
+
+    def add_subapp(self, subapp, prefix, *, name=None, expect_handler=None):
+        assert prefix.startswith('/')
+        if not prefix.endswith('/'):
+            prefix += '/'
+        route = SubAppRoute(subapp, prefix, name,
+                            expect_handler=expect_handler)
+        self.register_route(route)
+        self._subapps.append(subapp)
+        return route
+
+    @asyncio.coroutine
+    def finish(self, app):
+        subapps, self._subapps = self._subapps, []
+        for subapp in subapps:
+            yield from subapp.finish()

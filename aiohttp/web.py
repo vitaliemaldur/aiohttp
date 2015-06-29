@@ -192,7 +192,6 @@ class SubApplication(dict):
         for factory in middlewares:
             assert asyncio.iscoroutinefunction(factory), factory
         self._middlewares = list(middlewares)
-        self._subapps = []
 
     @property
     def router(self):
@@ -208,12 +207,9 @@ class SubApplication(dict):
 
     @asyncio.coroutine
     def finish(self):
-        subapps, self._subapps = self._subapps, []
-        for subapp in subapps:
-            yield from subapp.finish()
-
         callbacks = self._finish_callbacks
         self._finish_callbacks = []
+        callbacks.append((self.router.finish, (), {}))
 
         for (cb, args, kwargs) in callbacks:
             try:
@@ -226,6 +222,9 @@ class SubApplication(dict):
                     'message': "Error in finish callback",
                     'exception': exc,
                     'application': self,
+                    'callback': cb,
+                    'args': args,
+                    'kwargs': kwargs,
                 })
 
     def register_on_finish(self, func, *args, **kwargs):
