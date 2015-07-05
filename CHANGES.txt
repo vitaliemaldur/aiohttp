@@ -38,6 +38,10 @@ CHANGES
 
 - Pass ssl context through proxy connector #421
 
+- Make the rule: path for add_route should start with slash
+
+- Don't process request finishing by low-level server on closed event loop
+
 
 0.16.5 (06-13-2015)
 -------------------
