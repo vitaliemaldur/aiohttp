@@ -105,9 +105,21 @@ cdef class _Impl:
                 return 1
         return 0
 
-    cdef void remove(self, int index):
+    cdef void remove_at(self, int index):
         self._size -= 1
         del self._items[index]
+
+    cdef remove(self, object key):
+        cdef _Pair item
+        cdef int found
+        found = False
+        for i in range(len(self._items)-1, -1, -1):
+            item = <_Pair>self._items[i]
+            if item._key == key:
+                del self._items[i]
+                self._size -= 1
+                found = True
+        return found
 
     cdef _Pair popitem(self):
         self._size -= 1
@@ -362,7 +374,7 @@ cdef class MultiDict(_Base):
         self._impl.append(_Pair.__new__(_Pair, key, value))
 
     cdef _replace(self, str key, value):
-        self._remove(key, 0)
+        self._impl.remove(key)
         self._impl.append(_Pair.__new__(_Pair, key, value))
 
     def add(self, key, value):
@@ -391,18 +403,9 @@ cdef class MultiDict(_Base):
         self._replace(self._upper(key), value)
 
     def __delitem__(self, key):
-        self._remove(self._upper(key), True)
-
-    cdef _remove(self, str key, int raise_key_error):
-        cdef _Pair item
         cdef int found
-        found = False
-        for i in range(self._impl.capacity()-1, -1, -1):
-            item = <_Pair>self._impl.get(i)
-            if item._key == key:
-                self._impl.remove(i)
-                found = True
-        if not found and raise_key_error:
+        found = self._impl.remove(self._upper(key))
+        if not found:
             raise KeyError(key)
 
     def setdefault(self, key, default=None):
@@ -437,7 +440,7 @@ cdef class MultiDict(_Base):
             item = <_Pair>self._impl.get(i)
             if item._key == key:
                 value = item._value
-                self._impl.remove(i)
+                self._impl.remove_at(i)
                 found = True
         if not found:
             if default is self.marker:
