@@ -129,19 +129,35 @@ cdef class _Impl:
         else:
             bucket.append(pair)
 
+    cdef void replace(self, _Pair pair):
+        cdef _Pair item
+        cdef object key
+        key = pair._key
+        bucket = self._mapping.get(key)
+        if bucket is None:
+            self._mapping[key] = [pair]
+            self._items.append(pair)
+            self._size += 1
+        else:
+            self._size -= len(bucket)
+            for i in bucket:
+                item = <_Pair>i
+                item._key = None
+            bucket[:] = [pair]
+            self._items.append(pair)
+            self._size += 1
+
     cdef remove(self, object key):
         cdef _Pair item
-        cdef int found
-        found = False
         bucket = self._mapping.get(key)
         if bucket is None:
             return False
         else:
             del self._mapping[key]
+            self._size -= len(bucket)
             for i in bucket:
                 item = <_Pair>i
                 item._key = None
-                self._size -= 1
             return True
 
     cdef pop(self, object key):
@@ -433,8 +449,7 @@ cdef class MultiDict(_Base):
         self._impl.append(_Pair.__new__(_Pair, key, value))
 
     cdef _replace(self, str key, value):
-        self._impl.remove(key)
-        self._impl.append(_Pair.__new__(_Pair, key, value))
+        self._impl.replace(_Pair.__new__(_Pair, key, value))
 
     def add(self, key, value):
         """Add the key and value, not overwriting any previous value."""
