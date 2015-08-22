@@ -245,19 +245,16 @@ class _MultiDict(_Base, abc.MutableMapping):
 
         """
         value = None
-        found = False
-        for i in range(len(self._items) - 1, -1, -1):
+        for i in range(len(self._items)):
             if self._items[i][0] == key:
                 value = self._items[i][1]
                 del self._items[i]
-                found = True
-        if not found:
-            if default is _marker:
-                raise KeyError(key)
-            else:
-                return default
+                return value
+
+        if default is _marker:
+            raise KeyError(key)
         else:
-            return value
+            return default
 
     def popitem(self):
         """Remove and return an arbitrary (key, value) pair."""

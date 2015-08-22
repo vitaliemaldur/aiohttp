@@ -67,10 +67,12 @@ cdef class _Pair:
 cdef class _Impl:
     cdef int _size
     cdef list _items
+    cdef dict _mapping
 
     def __cinit__(self):
         self._size = 0
         self._items = []
+        self._mapping = {}
 
     cdef int size(self):
         return self._size
@@ -81,53 +83,100 @@ cdef class _Impl:
     cdef _Pair get(self, int index):
         return self._items[index]
 
+    cdef int equal(self, _Impl other):
+        cdef int i
+        cdef int j
+        cdef _Pair left
+        cdef _Pair right
+
+        if self._size != other._size:
+            return 0
+
+        i = 0
+        j = 0
+        while i < len(self._items) and j < len(other._items):
+            left = self.get(i)
+            i += 1
+            while left._key is None:
+                left = self.get(i)
+                i += 1
+
+            right = other.get(j)
+            j += 1
+            while right._key is None:
+                right = other.get(j)
+                j += 1
+
+            if left != right:
+                return 0
+
+        return 1
+
+    cdef int contains(self, object key):
+        return key in self._mapping
+
+    cdef int contains_pair(self, _Pair pair):
+        return pair._key in self._mapping
+
+    # modification API
+
     cdef void append(self, _Pair pair):
         self._size += 1
         self._items.append(pair)
-
-    cdef int equal(self, _Impl other):
-        if self._size != other._size:
-            return 0
-        return self._items == other._items
-
-    cdef int contains(self, object key):
-        for i in range(self.capacity()):
-            item = <_Pair>self.get(i)
-            if item._key == key:
-                return 1
-        return 0
-
-    cdef int contains_pair(self, _Pair pair):
-        cdef _Pair item
-        for i in self._items:
-            item = <_Pair>i
-            if item._key == pair._key and item._value == pair._value:
-                return 1
-        return 0
-
-    cdef void remove_at(self, int index):
-        self._size -= 1
-        del self._items[index]
+        bucket = self._mapping.get(pair._key)
+        if bucket is None:
+            self._mapping[pair._key] = [pair]
+        else:
+            bucket.append(pair)
 
     cdef remove(self, object key):
         cdef _Pair item
         cdef int found
         found = False
-        for i in range(len(self._items)-1, -1, -1):
-            item = <_Pair>self._items[i]
-            if item._key == key:
-                del self._items[i]
+        bucket = self._mapping.get(key)
+        if bucket is None:
+            return False
+        else:
+            del self._mapping[key]
+            for i in bucket:
+                item = <_Pair>i
+                item._key = None
                 self._size -= 1
-                found = True
-        return found
+            return True
 
-    cdef _Pair popitem(self):
+    cdef pop(self, object key):
+        cdef _Pair item
+        cdef int i
+
+        bucket = self._mapping.get(key)
+        if bucket is None:
+            return (False, None)
+
+        item = bucket.pop(0)
+        item._key = None
         self._size -= 1
-        return <_Pair>self._items.pop(0)
+        if not bucket:
+            del self._mapping[key]
+        return (True, item._value)
+
+    cdef object popitem(self):
+        cdef _Pair item
+        if self._size == 0:
+            return None
+        i = next(iter(self._mapping.items()))
+        key, bucket = i
+        item = <_Pair>bucket.pop(0)
+        item._key = None
+        if not bucket:
+            del self._mapping[key]
+        return (key, item._value)
 
     cdef void clear(self):
         self._size = 0
         self._items.clear()
+        self._mapping.clear()
+
+    # views
 
     cdef _KeysView keys(self):
         return _KeysView.__new__(_KeysView, self)
@@ -166,6 +215,8 @@ cdef class _Base:
         res = []
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             if item._key == key:
                 res.append(item._value)
         if res:
@@ -184,6 +235,8 @@ cdef class _Base:
         key = self._upper(key)
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             if item._key == key:
                 return item._value
         if default is not self.marker:
@@ -231,32 +284,36 @@ cdef class _Base:
         lst = []
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             lst.append("'{}': {!r}".format(item._key, item._value))
         body = ', '.join(lst)
         return '<{}({})>'.format(self.__class__.__name__, body)
 
-    cdef _eq_to_mapping(self, other):
+    cdef int _eq_to_mapping(self, other):
         cdef _Pair item
+        if self._impl.size() != len(other):
+            return 0
         left_keys = set(self.keys())
         right_keys = set(other.keys())
         if left_keys != right_keys:
-            return False
-        if self._impl.size() != len(right_keys):
-            return False
+            return 0
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             nv = other.get(item._key, self.marker)
             if item._value != nv:
-                return False
-        return True
+                return 0
+        return 1
 
     def __richcmp__(self, other, op):
         if op == 2:  # ==
-            return _eq(self, other)
+            return bool(_eq(self, other))
         elif op == 3:  # !=
             ret = _eq(self, other)
             if ret is NotImplemented:
-                return ret
+                return bool(ret)
             else:
                 return not ret
         else:
@@ -325,6 +382,8 @@ cdef class MultiDict(_Base):
             if isinstance(arg, _Base):
                 for j in range((<_Base>arg)._impl.capacity()):
                     item = (<_Base>arg)._impl.get(j)
+                    if item._key is None:
+                        continue
                     key = self._upper(item._key)
                     value = item._value
                     if do_add:
@@ -416,6 +475,8 @@ cdef class MultiDict(_Base):
         skey = self._upper(key)
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             if item._key == skey:
                 return item._value
         self._add(skey, default)
@@ -428,20 +489,7 @@ cdef class MultiDict(_Base):
         KeyError is raised.
 
         """
-        cdef int found
-        cdef str skey
-        cdef object value
-        cdef _Pair item
-        cdef int i
-        skey = self._upper(key)
-        value = None
-        found = False
-        for i in range(self._impl.capacity()-1, -1, -1):
-            item = <_Pair>self._impl.get(i)
-            if item._key == key:
-                value = item._value
-                self._impl.remove_at(i)
-                found = True
+        found, value = self._impl.pop(self._upper(key))
         if not found:
             if default is self.marker:
                 raise KeyError(key)
@@ -452,12 +500,11 @@ cdef class MultiDict(_Base):
 
     def popitem(self):
         """Remove and return an arbitrary (key, value) pair."""
-        cdef _Pair item
-        if self._impl.size():
-            item = self._impl.popitem()
-            return (item._key, item._value)
-        else:
+        ret = self._impl.popitem()
+        if ret is None:
             raise KeyError("empty multidict")
+        else:
+            return ret
 
     def update(self, *args, **kwargs):
         """Update the dictionary from *other*, overwriting existing keys."""
@@ -557,23 +604,19 @@ cdef class _ViewBaseSet(_ViewBase):
 
 
 cdef class _ItemsIter:
-    cdef list _items
-    cdef int _current
-    cdef int _len
+    cdef object _iter
 
     def __cinit__(self, items):
-        self._items = items
-        self._current = 0
-        self._len = len(self._items)
+        self._iter = iter(items)
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self._current == self._len:
-            raise StopIteration
-        item = <_Pair>self._items[self._current]
-        self._current += 1
+        cdef _Pair item
+        item = next(self._iter)
+        while item._key is None:
+            item = next(self._iter)
         return (item._key, item._value)
 
 
@@ -605,6 +648,8 @@ cdef class _ItemsView(_ViewBaseSet):
         lst = []
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             lst.append("{!r}: {!r}".format(item._key, item._value))
         body = ', '.join(lst)
         return '{}({})'.format(self.__class__.__name__, body)
@@ -614,23 +659,19 @@ abc.ItemsView.register(_ItemsView)
 
 
 cdef class _ValuesIter:
-    cdef list _items
-    cdef int _current
-    cdef int _len
+    cdef object _iter
 
     def __cinit__(self, items):
-        self._items = items
-        self._current = 0
-        self._len = len(self._items)
+        self._iter = iter(items)
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self._current == self._len:
-            raise StopIteration
-        item = <_Pair>self._items[self._current]
-        self._current += 1
+        cdef _Pair item
+        item = next(self._iter)
+        while item._key is None:
+            item = next(self._iter)
         return item._value
 
 
@@ -641,6 +682,8 @@ cdef class _ValuesView(_ViewBase):
         cdef int i
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             if item._value == value:
                 return True
         return False
@@ -654,6 +697,8 @@ cdef class _ValuesView(_ViewBase):
         lst = []
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             lst.append("{!r}".format(item._value))
         body = ', '.join(lst)
         return '{}({})'.format(self.__class__.__name__, body)
@@ -663,23 +708,19 @@ abc.ValuesView.register(_ValuesView)
 
 
 cdef class _KeysIter:
-    cdef list _items
-    cdef int _current
-    cdef int _len
+    cdef object _iter
 
     def __cinit__(self, items):
-        self._items = items
-        self._current = 0
-        self._len = len(self._items)
+        self._iter = iter(items)
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self._current == self._len:
-            raise StopIteration
-        item = <_Pair>self._items[self._current]
-        self._current += 1
+        cdef _Pair item
+        item = next(self._iter)
+        while item._key is None:
+            item = next(self._iter)
         return item._key
 
 
@@ -691,6 +732,8 @@ cdef class _KeysView(_ViewBaseSet):
         cdef int i
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             if item._key in other:
                 return False
         return True
@@ -700,6 +743,8 @@ cdef class _KeysView(_ViewBaseSet):
         cdef int i
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             if item._key == value:
                 return True
         return False
@@ -713,6 +758,8 @@ cdef class _KeysView(_ViewBaseSet):
         lst = []
         for i in range(self._impl.capacity()):
             item = <_Pair>self._impl.get(i)
+            if item._key is None:
+                continue
             lst.append("{!r}".format(item._key))
         body = ', '.join(lst)
         return '{}({})'.format(self.__class__.__name__, body)

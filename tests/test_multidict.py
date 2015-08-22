@@ -540,6 +540,8 @@ class _BaseMutableMultiDictTests(_BaseTest):
         d.add('key', 'val2')
 
         self.assertEqual('val1', d.pop('key'))
+        self.assertEqual({'key': 'val2'}, d)
+        self.assertEqual('val2', d.pop('key'))
         self.assertFalse(d)
 
     def test_pop_default(self):
@@ -625,6 +627,7 @@ class _CIMutableMultiDictTests(_Root):
         self.assertEqual(d.getall('key'), ['one'])
 
         d['KEY'] = 'two'
+        self.assertEqual(1, len(d))
         self.assertEqual(d, {'KEY': 'two'})
         self.assertEqual(d.getall('key'), ['two'])
 
@@ -718,6 +721,8 @@ class _CIMutableMultiDictTests(_Root):
         d.add('key', 'val2')
 
         self.assertEqual('val1', d.pop('KEY'))
+        self.assertEqual({'KEY': 'val2'}, d)
+        self.assertEqual('val2', d.pop('KEY'))
         self.assertFalse(d)
 
     def test_pop_default(self):
