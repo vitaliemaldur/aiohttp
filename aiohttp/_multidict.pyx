@@ -68,11 +68,13 @@ cdef class _Impl:
     cdef int _size
     cdef list _items
     cdef dict _mapping
+    cdef object _last_key
 
     def __cinit__(self):
         self._size = 0
         self._items = []
         self._mapping = {}
+        self._last_key = None
 
     cdef int size(self):
         return self._size
@@ -123,6 +125,7 @@ cdef class _Impl:
     cdef void append(self, _Pair pair):
         self._size += 1
         self._items.append(pair)
+        self._last_key = pair._key
         bucket = self._mapping.get(pair._key)
         if bucket is None:
             self._mapping[pair._key] = [pair]
@@ -158,6 +161,8 @@ cdef class _Impl:
             for i in bucket:
                 item = <_Pair>i
                 item._key = None
+            if key != self._last_key:
+                self._last_key = None
             return True
 
     cdef pop(self, object key):
@@ -171,6 +176,8 @@ cdef class _Impl:
         item = bucket.pop(0)
         item._key = None
         self._size -= 1
+        if key != self._last_key:
+            self._last_key = None
         if not bucket:
             del self._mapping[key]
         return (True, item._value)
@@ -179,6 +186,7 @@ cdef class _Impl:
         cdef _Pair item
         if self._size == 0:
             return None
+        self._last_key = None
         i = next(iter(self._mapping.items()))
         key, bucket = i
         item = <_Pair>bucket.pop(0)
@@ -191,6 +199,7 @@ cdef class _Impl:
         self._size = 0
         self._items.clear()
         self._mapping.clear()
+        self._last_key = None
 
     # views
 
