@@ -62,8 +62,7 @@ class TestUrlDispatcher(unittest.TestCase):
     def test_register_route(self):
         handler = self.make_handler()
         route = PlainRoute('GET', handler, 'test', '/handler/to/path')
-        with self.assertWarns(DeprecationWarning):
-            self.router.register_route(route)
+        self.router.register_route(route)
 
         req = self.make_request('GET', '/handler/to/path')
         info = self.loop.run_until_complete(self.router.resolve(req))
