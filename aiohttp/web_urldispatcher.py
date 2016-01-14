@@ -235,6 +235,43 @@ class DynamicResource(Resource):
                 .format(name=name, formatter=self._formatter))
 
 
+class SubAppResource(BaseResource):
+
+    def __init__(self, prefix, subapp, *, name=None):
+        assert prefix.startswith('/'), prefix
+        assert prefix.endswith('/'), prefix
+        from aiohttp.web import Application
+        assert isinstance(subapp, Application)
+        super().__init__(name=name)
+        self._prefix = prefix
+        self._subapp = subapp
+
+    def match(self, path):
+        if path.startswith(self._prefix):
+            return {}
+        else:
+            return None
+
+    def url(self, **kwargs):
+        raise NotImplementedError()
+        # return self._prefix[:-1] +
+
+    def resolve(self, method, path):
+        match_dict = self._route.match(path)
+        allowed_methods = {self._route.method}
+        if match_dict is not None:
+            return (UrlMappingMatchInfo(match_dict, self._route),
+                    allowed_methods)
+        else:
+            return None, allowed_methods
+
+    def __len__(self):
+        return 1
+
+    def __iter__(self):
+        yield self._route
+
+
 class BaseRoute(metaclass=abc.ABCMeta):
     def __init__(self, method, handler, *,
                  expect_handler=None):
@@ -686,6 +723,7 @@ class UrlDispatcher(AbstractRouter, collections.abc.Mapping):
         return self.named_resources()
 
     def register_route(self, route):
+        warnings.warn("Use resource-based interface", DeprecationWarning)
         resource = ResourceAdapter(route)
         self._reg_resource(resource)
 
@@ -771,3 +809,8 @@ class UrlDispatcher(AbstractRouter, collections.abc.Mapping):
                             response_factory=response_factory)
         self.register_route(route)
         return route
+
+    def add_subapp(self, prefix, subapp, *, name=None):
+        resource = SubAppResource(prefix, subapp, name=name)
+        self._reg_resource(resource)
+        return resource
