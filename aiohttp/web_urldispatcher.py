@@ -94,6 +94,7 @@ class ResourceAdapter(BaseResource):
             'Instance of Route class is required, got {!r}'.format(route)
         super().__init__(name=route.name)
         self._route = route
+        route._resource = self
 
     def match(self, path):
         return self._route.match(path)
@@ -102,13 +103,14 @@ class ResourceAdapter(BaseResource):
         return self._route.url(**kwargs)
 
     def resolve(self, method, path):
-        match_dict = self._route.match(path)
-        allowed_methods = {self._route.method}
-        if match_dict is not None:
-            return (UrlMappingMatchInfo(match_dict, self._route),
-                    allowed_methods)
-        else:
-            return None, allowed_methods
+        route_method = self._route.method
+        allowed_methods = {route_method}
+        if route_method == method or route_method == hdrs.METH_ANY:
+            match_dict = self._route.match(path)
+            if match_dict is not None:
+                return (UrlMappingMatchInfo(match_dict, self._route),
+                        allowed_methods)
+        return None, allowed_methods
 
     def __len__(self):
         return 1
@@ -118,7 +120,6 @@ class ResourceAdapter(BaseResource):
 
 
 class Resource(BaseResource):
-    METHODS = hdrs.METH_ALL | {hdrs.METH_ANY}
 
     def __init__(self, *, name=None):
         super().__init__(name=name)
@@ -126,26 +127,6 @@ class Resource(BaseResource):
 
     def add_route(self, method, handler, *,
                   expect_handler=None):
-
-        if expect_handler is None:
-            expect_handler = _defaultExpectHandler
-
-        assert asyncio.iscoroutinefunction(expect_handler), \
-            'Coroutine is expected, got {!r}'.format(expect_handler)
-
-        assert callable(handler), handler
-        if asyncio.iscoroutinefunction(handler):
-            pass
-        elif inspect.isgeneratorfunction(handler):
-            pass
-        elif isinstance(handler, type) and issubclass(handler, AbstractView):
-            pass
-        else:
-            handler = asyncio.coroutine(handler)
-
-        method = upstr(method)
-        if method not in self.METHODS:
-            raise ValueError("{} is not allowed HTTP method".format(method))
 
         # TODO: add check for duplicated methods
 
@@ -158,11 +139,6 @@ class Resource(BaseResource):
         assert isinstance(route, ResourceRoute), \
             'Instance of Route class is required, got {!r}'.format(route)
         self._routes.append(route)
-
-    @abc.abstractmethod  # pragma: no branch
-    def match(self, path):
-        """Return dict with info for given path or
-        None if route cannot process path."""
 
     def resolve(self, method, path):
         allowed_methods = set()
@@ -273,11 +249,39 @@ class SubAppResource(BaseResource):
 
 
 class BaseRoute(metaclass=abc.ABCMeta):
+    METHODS = hdrs.METH_ALL | {hdrs.METH_ANY}
+
     def __init__(self, method, handler, *,
-                 expect_handler=None):
+                 expect_handler=None,
+                 resource=None):
+
+        if expect_handler is None:
+            expect_handler = _defaultExpectHandler
+
+        assert asyncio.iscoroutinefunction(expect_handler), \
+            'Coroutine is expected, got {!r}'.format(expect_handler)
+
+        method = upstr(method)
+        if method not in self.METHODS:
+            raise ValueError("{} is not allowed HTTP method".format(method))
+
+        if handler is not None:
+            assert callable(handler), handler
+            if asyncio.iscoroutinefunction(handler):
+                pass
+            elif inspect.isgeneratorfunction(handler):
+                warnings.warn("Bare generators are deprecated, "
+                              "use @coroutine wrapper", DeprecationWarning)
+            elif (isinstance(handler, type) and
+                  issubclass(handler, AbstractView)):
+                pass
+            else:
+                handler = asyncio.coroutine(handler)
+
         self._method = method
         self._handler = handler
         self._expect_handler = expect_handler
+        self._resource = resource
 
     @property
     def method(self):
@@ -286,6 +290,10 @@ class BaseRoute(metaclass=abc.ABCMeta):
     @property
     def handler(self):
         return self._handler
+
+    @property
+    def resource(self):
+        return self._resource
 
     @abc.abstractmethod  # pragma: no branch
     def match(self, path):
@@ -308,8 +316,8 @@ class ResourceRoute(BaseRoute):
 
     def __init__(self, method, handler, resource, *,
                  expect_handler=None):
-        super().__init__(method, handler, expect_handler=expect_handler)
-        self._resource = resource
+        super().__init__(method, handler, expect_handler=expect_handler,
+                         resource=resource)
 
     def __repr__(self):
         return "<ResourceRoute [{method}] {resource} -> {handler!r}".format(
@@ -319,10 +327,6 @@ class ResourceRoute(BaseRoute):
     @property
     def name(self):
         return self._resource.name
-
-    @property
-    def resource(self):
-        return self._resource
 
     def match(self, path):
         """Return dict with info for given path or
@@ -338,11 +342,6 @@ class Route(BaseRoute):
     """Old fashion route"""
 
     def __init__(self, method, handler, name, *, expect_handler=None):
-        if expect_handler is None:
-            expect_handler = _defaultExpectHandler
-        assert asyncio.iscoroutinefunction(expect_handler), \
-            'Coroutine is expected, got {!r}'.format(expect_handler)
-
         super().__init__(method, handler, expect_handler=expect_handler)
         self._name = name
 
@@ -458,10 +457,15 @@ class StaticRoute(Route):
         """
         Write `count` bytes of `fobj` to `resp` starting from `offset` using
         the ``sendfile`` system call.
+
         `req` should be a :obj:`aiohttp.web.Request` instance.
+
         `resp` should be a :obj:`aiohttp.web.StreamResponse` instance.
+
         `fobj` should be an open file object.
+
         `offset` should be an integer >= 0.
+
         `count` should be an integer > 0.
         """
         transport = req.transport
@@ -487,6 +491,7 @@ class StaticRoute(Route):
         Mimic the :meth:`_sendfile_system` method, but without using the
         ``sendfile`` system call. This should be used on systems that don't
         support the ``sendfile`` system call.
+
         To avoid blocking the event loop & to keep memory usage low, `fobj` is
         transferred in chunks controlled by the `chunk_size` argument to
         :class:`StaticRoute`.
@@ -671,10 +676,6 @@ class UrlDispatcher(AbstractRouter, collections.abc.Mapping):
     GOOD = r'[^{}/]+'
     ROUTE_RE = re.compile(r'(\{[_a-zA-Z][^{}]*(?:\{[^{}]*\}[^{}]*)*\})')
     NAME_SPLIT_RE = re.compile('[.:-]')
-
-    METHODS = {hdrs.METH_ANY, hdrs.METH_POST,
-               hdrs.METH_GET, hdrs.METH_PUT, hdrs.METH_DELETE,
-               hdrs.METH_PATCH, hdrs.METH_HEAD, hdrs.METH_OPTIONS}
 
     def __init__(self):
         super().__init__()
