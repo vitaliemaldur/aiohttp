@@ -216,11 +216,13 @@ class SubAppResource(BaseResource):
     def __init__(self, prefix, subapp, *, name=None):
         assert prefix.startswith('/'), prefix
         assert prefix.endswith('/'), prefix
+        assert name is None, "Named subapplications are not supported"
         from aiohttp.web import Application
         assert isinstance(subapp, Application)
         super().__init__(name=name)
         self._prefix = prefix
         self._subapp = subapp
+        self._route = SubAppRoute(self)
 
     def match(self, path):
         if path.startswith(self._prefix):
@@ -233,8 +235,8 @@ class SubAppResource(BaseResource):
         # return self._prefix[:-1] +
 
     def resolve(self, method, path):
-        match_dict = self._route.match(path)
-        allowed_methods = {self._route.method}
+        match_dict = self.match(path)
+        allowed_methods = {'*'}  # TODO: extend wildcard
         if match_dict is not None:
             return (UrlMappingMatchInfo(match_dict, self._route),
                     allowed_methods)
@@ -336,6 +338,48 @@ class ResourceRoute(BaseRoute):
     def url(self, **kwargs):
         """Construct url for route with additional params."""
         return self._resource.url(**kwargs)
+
+
+class SubAppRoute(BaseRoute):
+    """A trampoline route to subapplication"""
+
+    def __init__(self, resource):
+        # TODO: custom expect handler is not supported by subapps yet
+        super().__init__('*', self.handler, resource=resource)
+
+    def __repr__(self):
+        return "<SubAppRoute {resource}".format(resource=self._resource)
+
+    @property
+    def name(self):
+        return self._resource.name  # always None
+
+    def match(self, path):
+        return self._resource.match(path)
+
+    def url(self, **kwargs):
+        raise RuntimeError(".url() is not allowed for SystemRoute")
+
+    @asyncio.coroutine
+    def handler(self, request):
+        subapp = self._resource._subapp
+        match_info = yield from self._router.resolve(request)
+
+        assert isinstance(match_info, AbstractMatchInfo), match_info
+
+        resp = None
+        request._match_info = match_info
+        expect = request.headers.get(hdrs.EXPECT)
+        if expect and expect.lower() == "100-continue":
+            resp = (
+                yield from match_info.route.handle_expect_header(request))
+
+        if resp is None:
+            handler = match_info.handler
+            for factory in reversed(subapp.middlewares):
+                handler = yield from factory(subapp, handler)
+            resp = yield from handler(request)
+        return resp
 
 
 class Route(BaseRoute):
