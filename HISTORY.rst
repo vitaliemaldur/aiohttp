@@ -1,3 +1,132 @@
+0.22.5 (08-02-2016)
+-------------------
+
+- Pin miltidict version to >=1.2.2
+
+0.22.3 (07-26-2016)
+-------------------
+
+- Do not filter cookies if unsafe flag provided #1005
+
+
+0.22.2 (07-23-2016)
+-------------------
+
+- Suppress CancelledError when Timeout raises TimeoutError #970
+
+- Don't expose `aiohttp.__version__`
+
+- Add unsafe parameter to CookieJar #968
+
+- Use unsafe cookie jar in test client tools
+
+- Expose aiohttp.CookieJar name
+
+
+0.22.1 (07-16-2016)
+-------------------
+
+- Large cookie expiration/max-age doesn't break an event loop from now
+  (fixes #967)
+
+
+0.22.0 (07-15-2016)
+-------------------
+
+- Fix bug in serving static directory #803
+
+- Fix command line arg parsing #797
+
+- Fix a documentation chapter about cookie usage #790
+
+- Handle empty body with gzipped encoding #758
+
+- Support 451 Unavailable For Legal Reasons http status  #697
+
+- Fix Cookie share example and few small typos in docs #817
+
+- UrlDispatcher.add_route with partial coroutine handler #814
+
+- Optional support for aiodns #728
+
+- Add ServiceRestart and TryAgainLater websocket close codes #828
+
+- Fix prompt message for `web.run_app` #832
+
+- Allow to pass None as a timeout value to disable timeout logic #834
+
+- Fix leak of connection slot during connection error #835
+
+- Gunicorn worker with uvloop support
+  `aiohttp.worker.GunicornUVLoopWebWorker` #878
+
+- Don't send body in response to HEAD request #838
+
+- Skip the preamble in MultipartReader #881
+
+- Implement BasicAuth decode classmethod. #744
+
+- Don't crash logger when transport is None #889
+
+- Use a create_future compatibility wrapper instead of creating
+  Futures directly #896
+
+- Add test utilities to aiohttp #902
+
+- Improve Request.__repr__ #875
+
+- Skip DNS resolving if provided host is already an ip address #874
+
+- Add headers to ClientSession.ws_connect #785
+
+- Document that server can send pre-compressed data #906
+
+- Don't add Content-Encoding and Transfer-Encoding if no body #891
+
+- Add json() convenience methods to websocket message objects #897
+
+- Add client_resp.raise_for_status() #908
+
+- Implement cookie filter #799
+
+- Include an example of middleware to handle error pages #909
+
+- Fix error handling in StaticFileMixin #856
+
+- Add mocked request helper #900
+
+- Fix empty ALLOW Response header for cls based View #929
+
+- Respect CONNECT method to implement a proxy server #847
+
+- Add pytest_plugin #914
+
+- Add tutorial
+
+- Add backlog option to support more than 128 (default value in
+  "create_server" function) concurrent connections #892
+
+- Allow configuration of header size limits #912
+
+- Separate sending file logic from StaticRoute dispatcher #901
+
+- Drop deprecated share_cookies connector option (BACKWARD INCOMPATIBLE)
+
+- Drop deprecated support for tuple as auth parameter.
+  Use aiohttp.BasicAuth instead (BACKWARD INCOMPATIBLE)
+
+- Remove deprecated `request.payload` property, use `content` instead.
+  (BACKWARD INCOMPATIBLE)
+
+- Drop all mentions about api changes in documentation for versions
+  older than 0.16
+
+- Allow to override default cookie jar #963
+
+- Add manylinux wheel builds
+
+- Dup a socket for sendfile usage #964
+
 0.21.6 (05-05-2016)
 -------------------
 
@@ -12,10 +141,10 @@
 0.21.4 (03-12-2016)
 -------------------
 
-- Fix ResourceAdapter: dont add method to allowed if resource is not
+- Fix ResourceAdapter: don't add method to allowed if resource is not
   match #826
 
-- Fix Resouce: append found method to returned allowed methods
+- Fix Resource: append found method to returned allowed methods
 
 0.21.2 (02-16-2016)
 -------------------
@@ -160,7 +289,7 @@
 - Avoid sending cookie attributes in Cookie header #613
 
 - Round server timeouts to seconds for grouping pending calls.  That
-  leads to less amount of poller syscalls e.g epoll.poll(). #702
+  leads to less amount of poller syscalls e.g. epoll.poll(). #702
 
 - Close connection on websocket handshake error #703
 
@@ -182,7 +311,7 @@
 
 - Memory leak in ParserBuffer #579
 
-- Suppport gunicorn's `max_requests` settings in gunicorn worker
+- Support gunicorn's `max_requests` settings in gunicorn worker
 
 - Fix wsgi environment building #573
 
@@ -320,7 +449,7 @@
 
 - Implement server signals #562
 
-- Drop an year-old deprecated *files* parameter from client API.
+- Drop a year-old deprecated *files* parameter from client API.
 
 - Added `async for` support for aiohttp stream #542
 
@@ -352,7 +481,7 @@
 0.17.1 (08-10-2015)
 ---------------------
 
-- Fix multidict comparsion to arbitrary abc.Mapping
+- Fix multidict comparison to arbitrary abc.Mapping
 
 0.17.0 (08-04-2015)
 ---------------------
@@ -400,7 +529,7 @@
 - Ensure multipart.BodyPartReader.read_chunk read all the necessary data
   to avoid false assertions about malformed multipart payload
 
-- Dont sent body for 204, 205 and 304 http exceptions #442
+- Don't send body for 204, 205 and 304 http exceptions #442
 
 - Correctly skip Cython compilation in MSVC not found #453
 
@@ -505,7 +634,7 @@
 
 - Flow control subsystem refactoring
 
-- HTTP server performace optimizations
+- HTTP server performance optimizations
 
 - Allow to match any request method with `*`
 
@@ -525,7 +654,7 @@
 0.15.1 (03-31-2015)
 -------------------
 
-- Pass Autobahn Testsuit tests
+- Pass Autobahn Testsuite tests
 
 - Fixed websocket fragmentation
 
@@ -608,7 +737,7 @@
 
 - multidict.getall() returns `list`, not `tuple`.
 
-- Backward imcompatible change: now there are two mutable multidicts
+- Backward incompatible change: now there are two mutable multidicts
   (`MultiDict`, `CIMultiDict`) and two immutable multidict proxies
   (`MultiDictProxy` and `CIMultiDictProxy`). Previous edition of
   multidicts was not a part of public API BTW.
@@ -639,7 +768,7 @@
 
 - Add `aiohttp.web.StreamResponse.started` property #213
 
-- Html escape traceback text in `ServerHttpProtocol.handle_error`
+- HTML escape traceback text in `ServerHttpProtocol.handle_error`
 
 - Mention handler and middlewares in `aiohttp.web.RequestHandler.handle_request`
   on error (#218)
@@ -677,7 +806,7 @@
 
 - Added POST attribute
 
-- Response processing refactoring: constructor does't accept Request
+- Response processing refactoring: constructor doesn't accept Request
   instance anymore.
 
 - Pass application instance to finish callback

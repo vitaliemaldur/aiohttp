@@ -8,6 +8,13 @@
 .. if you add new entries, keep the alphabetical sorting!
 
 .. glossary::
+   :sorted:
+
+   aiodns
+
+      DNS resolver for asyncio.
+
+      https://pypi.python.org/pypi/aiodns
 
    asyncio
 
@@ -52,7 +59,7 @@
       A concept reflects the HTTP **path**, every resource corresponds
       to *URI*.
 
-      May have an unique name.
+      May have a unique name.
 
       Contains :term:`route`\'s for different HTTP methods.
 
@@ -70,4 +77,13 @@
        single TCP connection. The WebSocket protocol was standardized
        by the IETF as :rfc:`6455`
 
+   yarl
+
+      A library for operating with URL objects.
+
+      https://pypi.python.org/pypi/yarl
+
+
+
 .. disqus::
+  :title: aiohttp glossary

@@ -3,37 +3,29 @@ import binascii
 import cgi
 import collections
 import datetime
+import enum
 import http.cookies
 import io
 import json
 import math
 import time
 import warnings
-
-import enum
-
 from email.utils import parsedate
 from types import MappingProxyType
-from urllib.parse import urlsplit, parse_qsl, unquote
 
-from multidict import (CIMultiDictProxy,
-                       CIMultiDict,
-                       MultiDictProxy,
-                       MultiDict)
+from multidict import CIMultiDict, CIMultiDictProxy, MultiDict, MultiDictProxy
+from yarl import URL
 
-from . import hdrs
-from .helpers import reify
-from .protocol import Response as ResponseImpl, HttpVersion10, HttpVersion11
+from . import hdrs, multipart
+from .helpers import reify, sentinel
+from .protocol import Response as ResponseImpl
+from .protocol import HttpVersion10, HttpVersion11
 from .streams import EOF_MARKER
-
 
 __all__ = (
     'ContentCoding', 'Request', 'StreamResponse', 'Response',
     'json_response'
 )
-
-
-sentinel = object()
 
 
 class HeadersMixin:
@@ -126,6 +118,13 @@ class Request(dict, HeadersMixin):
 
         'http' or 'https'.
         """
+        warnings.warn("path_qs property is deprecated, "
+                      "use .url.sheme instead",
+                      DeprecationWarning)
+        return self.url.scheme
+
+    @reify
+    def _scheme(self):
         if self._transport.get_extra_info('sslcontext'):
             return 'https'
         secure_proxy_ssl_header = self._secure_proxy_ssl_header
@@ -157,7 +156,14 @@ class Request(dict, HeadersMixin):
 
         Returns str or None if HTTP request has no HOST header.
         """
+        warnings.warn("host property is deprecated, "
+                      "use .url.host instead",
+                      DeprecationWarning)
         return self._message.headers.get(hdrs.HOST)
+
+    @reify
+    def rel_url(self):
+        return URL(self._message.path)
 
     @reify
     def path_qs(self):
@@ -165,12 +171,16 @@ class Request(dict, HeadersMixin):
 
         E.g, /app/blog?id=10
         """
-        return self._message.path
+        warnings.warn("path_qs property is deprecated, "
+                      "use str(request.rel_url) instead",
+                      DeprecationWarning)
+        return str(self.rel_url)
 
     @reify
-    def _splitted_path(self):
-        url = '{}://{}{}'.format(self.scheme, self.host, self.path_qs)
-        return urlsplit(url)
+    def url(self):
+        return URL('{}://{}{}'.format(self._scheme,
+                                      self._message.headers.get(hdrs.HOST),
+                                      str(self.rel_url)))
 
     @reify
     def raw_path(self):
@@ -179,7 +189,10 @@ class Request(dict, HeadersMixin):
 
         E.g., ``/my%2Fpath%7Cwith%21some%25strange%24characters``
         """
-        return self._splitted_path.path
+        warnings.warn("raw_path property is deprecated, "
+                      "use .rel_url.raw_path instead",
+                      DeprecationWarning)
+        return self.rel_url.raw_path
 
     @reify
     def path(self):
@@ -187,7 +200,9 @@ class Request(dict, HeadersMixin):
 
         E.g., ``/app/blog``
         """
-        return unquote(self.raw_path)
+        warnings.warn("path property is deprecated, use .rel_url.path instead",
+                      DeprecationWarning)
+        return self.rel_url.path
 
     @reify
     def query_string(self):
@@ -195,7 +210,10 @@ class Request(dict, HeadersMixin):
 
         E.g., id=10
         """
-        return self._splitted_path.query
+        warnings.warn("query_string property is deprecated, "
+                      "use .rel_url.query_string instead",
+                      DeprecationWarning)
+        return self.rel_url.query_string
 
     @reify
     def GET(self):
@@ -203,8 +221,9 @@ class Request(dict, HeadersMixin):
 
         Lazy property.
         """
-        return MultiDictProxy(MultiDict(parse_qsl(self.query_string,
-                                                  keep_blank_values=True)))
+        warnings.warn("GET property is deprecated, use .rel_url.query instead",
+                      DeprecationWarning)
+        return self.rel_url.query
 
     @reify
     def POST(self):
@@ -212,6 +231,8 @@ class Request(dict, HeadersMixin):
 
         post() methods has to be called before using this attribute.
         """
+        warnings.warn("POST property is deprecated, use .post() instead",
+                      DeprecationWarning)
         if self._post is None:
             raise RuntimeError("POST is not available before post()")
         return self._post
@@ -329,6 +350,11 @@ class Request(dict, HeadersMixin):
         return loads(body)
 
     @asyncio.coroutine
+    def multipart(self, *, reader=multipart.MultipartReader):
+        """Return async iterator to process BODY as multipart."""
+        return reader(self.headers, self.content)
+
+    @asyncio.coroutine
     def post(self):
         """Return POST parameters."""
         if self._post is not None:
@@ -343,6 +369,10 @@ class Request(dict, HeadersMixin):
                                  'multipart/form-data')):
             self._post = MultiDictProxy(MultiDict())
             return self._post
+
+        if self.content_type.startswith('multipart/'):
+            warnings.warn('To process multipart requests use .multipart'
+                          ' coroutine instead.', DeprecationWarning)
 
         body = yield from self.read()
         content_charset = self.charset or 'utf-8'
@@ -425,6 +455,8 @@ class StreamResponse(HeadersMixin):
 
         if headers is not None:
             self._headers.extend(headers)
+        self._parse_content_type(self._headers.get(hdrs.CONTENT_TYPE))
+        self._generate_content_type_header()
 
     def _copy_cookies(self):
         for cookie in self._cookies.values():
@@ -511,8 +543,12 @@ class StreamResponse(HeadersMixin):
 
         self._cookies[name] = value
         c = self._cookies[name]
+
         if expires is not None:
             c['expires'] = expires
+        elif c.get('expires') == 'Thu, 01 Jan 1970 00:00:00 GMT':
+            del c['expires']
+
         if domain is not None:
             c['domain'] = domain
 
@@ -537,7 +573,9 @@ class StreamResponse(HeadersMixin):
         """
         # TODO: do we need domain/path here?
         self._cookies.pop(name, None)
-        self.set_cookie(name, '', max_age=0, domain=domain, path=path)
+        self.set_cookie(name, '', max_age=0,
+                        expires="Thu, 01 Jan 1970 00:00:00 GMT",
+                        domain=domain, path=path)
 
     @property
     def content_length(self):
@@ -598,8 +636,7 @@ class StreamResponse(HeadersMixin):
     @last_modified.setter
     def last_modified(self, value):
         if value is None:
-            if hdrs.LAST_MODIFIED in self.headers:
-                del self.headers[hdrs.LAST_MODIFIED]
+            self.headers.pop(hdrs.LAST_MODIFIED, None)
         elif isinstance(value, (int, float)):
             self.headers[hdrs.LAST_MODIFIED] = time.strftime(
                 "%a, %d %b %Y %H:%M:%S GMT", time.gmtime(math.ceil(value)))
@@ -651,7 +688,7 @@ class StreamResponse(HeadersMixin):
         if self._resp_impl is not None:
             if self._req is not request:
                 raise RuntimeError(
-                    'Response has been started with different request.')
+                    "Response has been started with different request.")
             else:
                 return self._resp_impl
         else:
@@ -725,12 +762,18 @@ class StreamResponse(HeadersMixin):
 
         resp_impl.transport.set_tcp_nodelay(self._tcp_nodelay)
         resp_impl.transport.set_tcp_cork(self._tcp_cork)
-        resp_impl.send_headers()
+        self._send_headers(resp_impl)
         return resp_impl
+
+    def _send_headers(self, resp_impl):
+        # Durty hack required for
+        # https://github.com/KeepSafe/aiohttp/issues/1093
+        # File sender may override it
+        resp_impl.send_headers()
 
     def write(self, data):
         assert isinstance(data, (bytes, bytearray, memoryview)), \
-            'data argument must be byte-ish (%r)' % type(data)
+            "data argument must be byte-ish (%r)" % type(data)
 
         if self._eof_sent:
             raise RuntimeError("Cannot call write() after write_eof()")
@@ -772,49 +815,55 @@ class Response(StreamResponse):
     def __init__(self, *, body=None, status=200,
                  reason=None, text=None, headers=None, content_type=None,
                  charset=None):
-        super().__init__(status=status, reason=reason, headers=headers)
-        self.set_tcp_cork(True)
-
         if body is not None and text is not None:
-            raise ValueError("body and text are not allowed together.")
+            raise ValueError("body and text are not allowed together")
+
+        if headers is None:
+            headers = CIMultiDict()
+        elif not isinstance(headers, (CIMultiDict, CIMultiDictProxy)):
+            headers = CIMultiDict(headers)
+
+        if content_type is not None and ";" in content_type:
+            raise ValueError("charset must not be in content_type "
+                             "argument")
 
         if text is not None:
-            if hdrs.CONTENT_TYPE not in self.headers:
+            if hdrs.CONTENT_TYPE in headers:
+                if content_type or charset:
+                    raise ValueError("passing both Content-Type header and "
+                                     "content_type or charset params "
+                                     "is forbidden")
+            else:
                 # fast path for filling headers
                 if not isinstance(text, str):
-                    raise TypeError('text argument must be str (%r)' %
+                    raise TypeError("text argument must be str (%r)" %
                                     type(text))
                 if content_type is None:
                     content_type = 'text/plain'
-                elif ";" in content_type:
-                    raise ValueError('charset must not be in content_type '
-                                     'argument')
-                charset = charset or 'utf-8'
-                self.headers[hdrs.CONTENT_TYPE] = (
-                    content_type + '; charset=%s' % charset)
-                self._content_type = content_type
-                self._content_dict = {'charset': charset}
-                self.body = text.encode(charset)
-            else:
-                self.text = text
-                if content_type or charset:
-                    raise ValueError("Passing both Content-Type header and "
-                                     "content_type or charset params "
-                                     "is forbidden")
+                if charset is None:
+                    charset = 'utf-8'
+                headers[hdrs.CONTENT_TYPE] = (
+                    content_type + '; charset=' + charset)
+                body = text.encode(charset)
+                text = None
         else:
-            if hdrs.CONTENT_TYPE in self.headers:
-                if content_type or charset:
-                    raise ValueError("Passing both Content-Type header and "
+            if hdrs.CONTENT_TYPE in headers:
+                if content_type is not None or charset is not None:
+                    raise ValueError("passing both Content-Type header and "
                                      "content_type or charset params "
                                      "is forbidden")
-            if content_type:
-                self.content_type = content_type
-            if charset:
-                self.charset = charset
-            if body is not None:
-                self.body = body
             else:
-                self.body = None
+                if content_type is not None:
+                    if charset is not None:
+                        content_type += '; charset=' + charset
+                    headers[hdrs.CONTENT_TYPE] = content_type
+
+        super().__init__(status=status, reason=reason, headers=headers)
+        self.set_tcp_cork(True)
+        if text is not None:
+            self.text = text
+        else:
+            self.body = body
 
     @property
     def body(self):
@@ -823,7 +872,7 @@ class Response(StreamResponse):
     @body.setter
     def body(self, body):
         if body is not None and not isinstance(body, bytes):
-            raise TypeError('body argument must be bytes (%r)' % type(body))
+            raise TypeError("body argument must be bytes (%r)" % type(body))
         self._body = body
         if body is not None:
             self.content_length = len(body)
@@ -839,7 +888,7 @@ class Response(StreamResponse):
     @text.setter
     def text(self, text):
         if text is not None and not isinstance(text, str):
-            raise TypeError('text argument must be str (%r)' % type(text))
+            raise TypeError("text argument must be str (%r)" % type(text))
 
         if self.content_type == 'application/octet-stream':
             self.content_type = 'text/plain'
@@ -848,15 +897,13 @@ class Response(StreamResponse):
 
         self.body = text.encode(self.charset)
 
-    def should_send_body(self):
-        return (self._req.method != hdrs.METH_HEAD and
-                self._status not in [204, 304])
-
     @asyncio.coroutine
     def write_eof(self):
         try:
             body = self._body
-            if body is not None and self.should_send_body():
+            if (body is not None and
+                    self._req.method != hdrs.METH_HEAD and
+                    self._status not in [204, 304]):
                 self.write(body)
         finally:
             self.set_tcp_nodelay(True)
@@ -869,7 +916,7 @@ def json_response(data=sentinel, *, text=None, body=None, status=200,
     if data is not sentinel:
         if text or body:
             raise ValueError(
-                'only one of data, text, or body should be specified'
+                "only one of data, text, or body should be specified"
             )
         else:
             text = dumps(data)

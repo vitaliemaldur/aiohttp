@@ -1,16 +1,15 @@
 """Tests for http/wsgi.py"""
 
-import io
 import asyncio
+import io
 import socket
 import unittest
 from unittest import mock
 
+import multidict
+
 import aiohttp
-from aiohttp import multidict
-from aiohttp import wsgi
-from aiohttp import protocol
-from aiohttp import helpers
+from aiohttp import helpers, protocol, wsgi
 
 
 class TestHttpWsgiServerProtocol(unittest.TestCase):
@@ -29,7 +28,7 @@ class TestHttpWsgiServerProtocol(unittest.TestCase):
             ('1.2.3.4', 1234),
             ('2.3.4.5', 80)]
 
-        self.headers = multidict.MultiDict({"HOST": "python.org"})
+        self.headers = multidict.CIMultiDict({"HOST": "python.org"})
         self.raw_headers = [(b"HOST", b"python.org")]
         self.message = protocol.RawRequestMessage(
             'GET', '/path', (1, 0), self.headers, self.raw_headers,
@@ -76,6 +75,7 @@ class TestHttpWsgiServerProtocol(unittest.TestCase):
              ('X_TEST', '123'),
              ('X_TEST', '456')))
         environ = self._make_one()
+        print(environ)
         self.assertEqual(environ['CONTENT_TYPE'], 'text/plain')
         self.assertEqual(environ['CONTENT_LENGTH'], '209')
         self.assertEqual(environ['HTTP_X_TEST'], '123,456')
@@ -194,7 +194,7 @@ class TestHttpWsgiServerProtocol(unittest.TestCase):
             [c[1][0] for c in self.writer.write.mock_calls])
         self.assertTrue(content.startswith(b'HTTP/1.1 200 OK'))
         self.assertTrue(content.endswith(b'data\r\n0\r\n\r\n'))
-        self.assertFalse(srv._keep_alive)
+        self.assertFalse(srv._keepalive)
 
     def test_handle_request_io(self):
 
@@ -235,7 +235,7 @@ class TestHttpWsgiServerProtocol(unittest.TestCase):
             [c[1][0] for c in self.writer.write.mock_calls])
         self.assertTrue(content.startswith(b'HTTP/1.1 200 OK'))
         self.assertTrue(content.endswith(b'data\r\n0\r\n\r\n'))
-        self.assertTrue(srv._keep_alive)
+        self.assertTrue(srv._keepalive)
 
     def test_handle_request_readpayload(self):
 

@@ -3,14 +3,18 @@ Contributors
 
 A. Jesse Jiryu Davis
 Alejandro Gómez
+Aleksandr Danshyn
+Aleksey Kutepov
 Alex Khomchenko
 Alex Lisovoy
 Alex Key
 Alexander Bayandin
 Alexander Karpinsky
+Alexander Koshevoy
 Alexander Malev
 Alexander Shorin
 Alexander Travov
+Alexandru Mihai
 Alexey Popravka
 Amy Boyle
 Andrei Ursulenko
@@ -23,38 +27,50 @@ Ben Bader
 Benedikt Reinartz
 Brett Cannon
 Brian C. Lane
+Brian Muller
 Boris Feld
 Carl George
 Chien-Wei Huang
 Chih-Yuan Chen
+Chris AtLee
 Chris Laws
 Chris Moore
 Daniel García
 Daniel Nelson
+Danny Song
 David Michael Brown
 Dima Veselov
 Dimitar Dimitrov
+Dmitry Trofimov
 Dmytro Kuznetsov
 Dustin J. Mitchell
 Elizabeth Leddy
+Enrique Saez
 Erich Healy
 Eugene Chernyshov
+Eugene Naydenov
 Frederik Gladhorn
 Gabriel Tremblay
 Gennady Andreyev
 Georges Dubus
 Greg Holt
+Gregory Haynes
+Günther Jena
 Hugo Herter
 Igor Pavlov
 Ingmar Steen
 Jacob Champion
 Jaesung Lee
+Jakub Wilk
 Jashandeep Sohi
 Jeroen van der Heijden
 Jesus Cea
+Jinkyu Yi
 Joel Watts
+Joongi Kim
 Julien Duponchelle
 Junjie Tao
+Justas Trimailovas
 Kay Zheng
 Kirill Klenov
 Kirill Malovitsa
@@ -64,14 +80,19 @@ Louis-Philippe Huberdeau
 Lubomir Gelo
 Ludovic Gasc
 Lukasz Marcin Dobrzanski
+Manuel Miranda
 Marco Paolini
+Mariano Anaya
 Martin Richard
 Mathias Fröjdman
 Matthieu Hauglustaine
 Michael Ihnatenko
+Mikhail Kashkin
 Mikhail Lukyanchenko
+Misha Behersky
 Morgan Delahaye-Prat
 Moss Collum
+Mun Gwan-gyeong
 Nicolas Braem
 Nikolay Novik
 Olaf Conradi
@@ -84,6 +105,7 @@ Robert Lu
 Samuel Colvin
 Sebastian Hanula
 Sebastian Hüther
+SeongSoo Cho
 Sergey Ninua
 Sergey Skripnick
 Simon Kennedy
@@ -93,10 +115,12 @@ Stanislav Prokop
 Stephen Granade
 Steven Seguin
 Sviatoslav Bulbakha
+Taha Jahangir
 Taras Voinarovskyi
 Tolga Tezel
 Thomas Grainger
 Vaibhav Sagar
+Vamsi Krishna Avula
 Vasyl Baran
 Vitalik Verhovodov
 Vitaly Haritonsky
@@ -107,7 +131,10 @@ Vladimir Zakharov
 W. Trevor King
 Willem de Groot
 Yannick Koechlin
+Young-Ho Cha
 Yury Selivanov
 Yusuke Tsutsumi
 Марк Коренберг
 Семён Марьясин
+Pau Freixes
+Alexey Firsov
